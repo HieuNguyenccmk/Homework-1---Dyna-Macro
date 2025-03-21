@@ -1,0 +1,61 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def rouwenhorst_ar1(mu, rho, sigma, N):
+    ar_mean = mu / (1 - rho)
+    ar_sd = sigma / np.sqrt(1 - rho**2)
+    state_range = ar_sd * np.sqrt(N - 1)
+    y = np.linspace(ar_mean - state_range, ar_mean + state_range, N)
+    
+    if N == 1:
+        pmat = np.array([[1]])
+    else:
+        p = (1 + rho) / 2
+        q = p
+        pmat = np.array([[p, 1 - p], [1 - q, q]])
+        for n in range(3, N + 1):
+            p_up = np.block([[pmat, np.zeros((n - 1, 1))],
+                             [np.zeros((1, n - 1)), 0]])
+            p_down = np.block([[np.zeros((n - 1, 1)), pmat],
+                               [0, np.zeros((1, n - 1))]])
+            p_left = np.block([[np.zeros((1, n - 1)), 0],
+                               [pmat, np.zeros((n - 1, 1))]])
+            p_right = np.block([[0, np.zeros((1, n - 1))],
+                                 [np.zeros((n - 1, 1)), pmat]])
+            pmat = p * p_up + (1 - p) * p_down + q * p_right + (1 - q) * p_left
+            pmat[1:n - 1, :] /= 2
+    
+    return y, pmat
+
+def simulate(grid, pmat, T, seed):
+    np.random.seed(seed)
+    N = len(grid)
+    state0 = np.random.choice(N, p=np.ones(N)/N)
+    cmat = np.cumsum(pmat, axis=1)
+    y = np.zeros(T)
+    for i in range(T):
+        y[i] = grid[state0]
+        r = np.random.uniform()
+        state0 = np.searchsorted(cmat[state0, :], r)
+    return y
+
+# Parameters
+mu = 0.5
+sigma = 1
+N = 7
+T = 50
+seed = 2025
+gamma_values = [0.75, 0.85, 0.95, 0.99]
+
+plt.figure(figsize=(10, 6))
+for gamma in gamma_values:
+    y, pmat = rouwenhorst_ar1(mu, gamma, sigma, N)
+    ar_process = simulate(y, pmat, T, seed)
+    plt.plot(range(T), ar_process, label=f"γ1 = {gamma}")
+
+plt.axhline(y=np.mean(y), color='red', linestyle='--', label="Grid Mean")
+plt.xlabel('Time')
+plt.ylabel('Y')
+plt.title("AR(1) Process Simulations with Different γ1 Values")
+plt.legend()
+plt.show()

@@ -1,0 +1,109 @@
+from scipy.stats import norm
+from numpy import linspace, expand_dims, cumsum, ones, zeros, nonzero
+import numpy as np
+import matplotlib.pyplot as plt
+from numpy.random import uniform
+
+def rouwenhorst_ar1(mu, rho, sigma, N, m):
+
+    # Compute the mean and std. dev. of the stationary AR(1) process
+    ar_mean = mu / (1 - rho)
+    ar_sd = sigma / np.sqrt(1 - rho**2)
+
+    # Construct equally spaced grid with modified range
+    state_range = ar_sd * np.sqrt(N - 1)
+    y1 = ar_mean - state_range
+    yn = ar_mean + state_range
+    y, d = np.linspace(y1, yn, N, endpoint=True, retstep=True)
+
+    # Initialize transition matrix for N=2
+    if N == 1:
+        pmat = np.array([[1]])
+    else:
+        p = (1 + rho) / 2
+        q = p
+        pmat = np.array([[p, 1 - p], [1 - q, q]])
+
+        # Construct transition matrix for N>2 using Rouwenhorst's method
+        for n in range(3, N + 1):
+            p_up = np.block([[pmat, np.zeros((n - 1, 1))],
+                             [np.zeros((1, n - 1)), 0]])
+            p_down = np.block([[np.zeros((n - 1, 1)), pmat],
+                               [0, np.zeros((1, n - 1))]])
+            p_left = np.block([[np.zeros((1, n - 1)), 0],
+                               [pmat, np.zeros((n - 1, 1))]])
+            p_right = np.block([[0, np.zeros((1, n - 1))],
+                                 [np.zeros((n - 1, 1)), pmat]])
+
+            pmat = p * p_up + (1 - p) * p_down + q * p_right + (1 - q) * p_left
+
+            # Adjust probabilities
+            pmat[1:n - 1, :] /= 2
+
+    # Convert state vector to row format
+    y = expand_dims(y, axis=0)
+
+    # Check transition matrix
+    for i, row in enumerate(pmat):
+        if not np.isclose(row.sum(), 1):
+            print(f"Row {i} does not sum to 1: {row.sum()}")
+
+    print("State vector (y):")
+    print(y)
+
+    print("\nTransition matrix (pmat):")
+    print(pmat)
+
+    return y, pmat
+
+def simulate(grid, pmat, T):
+    # Initialize
+    N = grid.shape[1]  # Number of states
+    state0 = np.random.choice(N, p=np.ones(N)/N)  # Random initial state
+
+    # Simulate
+    cmat = np.cumsum(pmat, axis=1)  # CDF matrix
+    y = np.zeros((grid.shape[0], T))  # Container
+
+    for i in range(T):
+        y[:, i] = grid[:, state0]  # Current state
+        r = np.random.uniform()
+        state0 = np.searchsorted(cmat[state0, :], r)  # Update index for next period
+
+    return y
+
+# Thông số mô phỏng
+mu = 0.5
+rho = 0.85
+sigma = 1
+N = 7
+m = 3
+T = 50
+
+#%% Simulate the AR(1)'s based on discretized processes.
+
+seed = 2025  # Seed for random number.
+sim = {}
+
+# Tạo quy trình AR(1)
+y, pmat = rouwenhorst_ar1(mu, rho, sigma, N, m)
+
+# Mô phỏng chuỗi thời gian
+np.random.seed(seed)
+sim["ar_process"] = simulate(y, pmat, T)
+
+del seed
+
+#%% Plot the time series.
+time = range(T)  # X-axis
+
+plt.figure()
+plt.plot(time, np.squeeze(sim["ar_process"]), label="Simulated AR(1)")
+plt.axhline(y=np.mean(y), color='red', linestyle='--', label="Grid Mean")
+for state in y[0]:
+    plt.axhline(y=state, color='gray', linestyle=':', alpha=0.5)
+plt.xlabel('Time')
+plt.ylabel('Y')
+plt.title("AR(1) Process with Grid (Rouwenhorst)")
+plt.legend()
+plt.show()
